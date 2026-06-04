@@ -5,6 +5,7 @@ import dev.inmo.tgbotapi.extensions.api.edit.reply_markup.editMessageReplyMarkup
 import dev.inmo.tgbotapi.extensions.api.send.send
 import dev.inmo.tgbotapi.extensions.api.send.sendMessage
 import dev.inmo.tgbotapi.extensions.behaviour_builder.BehaviourContext
+import dev.inmo.tgbotapi.extensions.behaviour_builder.createSubContextAndDoAsynchronouslyWithUpdatesFilter
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitMessageDataCallbackQuery
 import dev.inmo.tgbotapi.extensions.behaviour_builder.expectations.waitTextMessage
 import dev.inmo.tgbotapi.extensions.utils.types.buttons.replyKeyboard
@@ -49,6 +50,37 @@ private suspend fun BehaviourContext.nextText(chatId: IdChatIdentifier): String 
         .filter { it.chat.id == chatId }
         .first()
         .content.text.orCancel().trim()
+
+/**
+ * Run [block] as a tracked conversation for [userId].
+ *
+ * The block is launched in its own update-consuming sub-context (a [Job]) and registered in
+ * [ConversationState]. When it finishes — normally, via [ConversationCancelledException], or
+ * because the job was cancelled through [ConversationState.cancel] — the registration is removed.
+ *
+ * If a conversation is already running for [userId] the freshly launched job is cancelled
+ * immediately, so callers should check [ConversationState.hasActive] first to inform the user
+ * instead of silently dropping the second attempt.
+ */
+suspend fun BehaviourContext.startConversation(
+    userId: Long,
+    block: suspend BehaviourContext.() -> Unit,
+) {
+    val job = createSubContextAndDoAsynchronouslyWithUpdatesFilter(
+        updatesUpstreamFlow = allUpdatesFlow
+    ) {
+        try {
+            block()
+        } catch (e: ConversationCancelledException) {
+            throw e
+        } finally {
+            ConversationState.end(userId)
+        }
+    }
+    if (!ConversationState.start(userId, job)) {
+        job.cancel()
+    }
+}
 
 /** Build a one-button-per-row reply keyboard from [options]. */
 fun replyKeyboardOf(options: List<String>) = replyKeyboard {

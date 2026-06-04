@@ -22,8 +22,10 @@ validation stay on the caller's side.
 | `waitConfirmation` | yes/no |
 | `waitMultiple` | collect a set of values until `/complete` |
 
-`ConversationState<T>` is a thread-safe registry of active conversations, so a bot can refuse to
-start a second concurrent flow for the same user and cancel a running one on demand.
+`startConversation` runs a flow in its own update-consuming sub-context and registers it in the
+thread-safe `ConversationState` singleton, so a bot can refuse to start a second concurrent flow
+for the same user (`ConversationState.hasActive`) and cancel a running one on demand
+(`ConversationState.cancel`).
 
 ## Usage
 
